@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import FooterSection from "@/components/FooterSection";
 import { Shield, CheckCircle, Circle, Loader2, ArrowRight, AlertTriangle, Lock, Activity, Zap, Cpu, FileCheck, Server, Database, Globe, Bug, Eye, Fingerprint, Network, ShieldAlert, ShieldCheck, Terminal } from "lucide-react";
@@ -23,37 +23,253 @@ interface ActionTaken {
   status: string;
 }
 
-// Dynamic issue generation based on threat score
-const generateDetectedIssues = (threatScore: number): DetectedIssue[] => {
+// Comprehensive vulnerability database with context-aware matching
+const VULNERABILITY_DATABASE = [
+  // Critical vulnerabilities
+  { 
+    id: "sql-injection", 
+    title: "SQL Injection Vulnerability", 
+    severity: "critical" as const,
+    description: "Unsanitized user input in database queries allows potential SQL injection attacks",
+    endpoints: ["/api/user", "/api/login", "/api/search", "/api/admin"],
+    recommendation: "Implement parameterized queries or prepared statements. Use ORM frameworks like SQLAlchemy or Hibernate."
+  },
+  { 
+    id: "remote-code-execution", 
+    title: "Remote Code Execution Risk", 
+    severity: "critical" as const,
+    description: "Application allows execution of arbitrary code through insecure deserialization or eval() usage",
+    endpoints: ["/api/execute", "/api/run", "/api/eval", "/api/script"],
+    recommendation: "Remove dangerous functions like eval(), exec(), and system(). Implement strict input validation and sandboxing."
+  },
+  { 
+    id: "zeroday-exploit", 
+    title: "Zero-Day Exploit Detected", 
+    severity: "critical" as const,
+    description: "Unknown vulnerability pattern matching recent CVE disclosures",
+    endpoints: ["/api/upload", "/api/process", "/api/parse"],
+    recommendation: "Apply latest security patches immediately. Enable WAF rules and implement virtual patching."
+  },
+  // High severity
+  { 
+    id: "xss-reflected", 
+    title: "Reflected XSS Attack", 
+    severity: "high" as const,
+    description: "Malicious script injected through URL parameters executes in user browser",
+    endpoints: ["/api/search", "/api/query", "/api/filter", "/api/lookup"],
+    recommendation: "Implement output encoding and Content Security Policy headers. Sanitize all user inputs."
+  },
+  { 
+    id: "xss-stored", 
+    title: "Stored XSS Vulnerability", 
+    severity: "high" as const,
+    description: "Malicious script stored in database and executed when viewed by other users",
+    endpoints: ["/api/comment", "/api/post", "/api/review", "/api/profile"],
+    recommendation: "Sanitize and validate all input. Implement CSP directives. Use frameworks with auto-escaping."
+  },
+  { 
+    id: "suspicious-ip-cluster", 
+    title: "Suspicious IP Cluster Activity", 
+    severity: "high" as const,
+    description: "Coordinated attack pattern detected from multiple IP addresses in same subnet",
+    endpoints: ["/api/*", "/login", "/admin"],
+    recommendation: "Block IP range at firewall level. Implement geo-blocking for high-risk regions. Enable rate limiting."
+  },
+  { 
+    id: "data-exfiltration", 
+    title: "Data Exfiltration Attempt", 
+    severity: "high" as const,
+    description: "Large data transfer patterns detected indicating potential data theft",
+    endpoints: ["/api/export", "/api/download", "/api/backup", "/api/dump"],
+    recommendation: "Implement DLP solutions. Monitor outbound traffic. Add data watermarking for traceability."
+  },
+  { 
+    id: "csrf-vulnerability", 
+    title: "CSRF Token Missing", 
+    severity: "high" as const,
+    description: "Application missing anti-CSRF tokens enabling cross-site request forgery attacks",
+    endpoints: ["/api/transfer", "/api/settings", "/api/password", "/api/delete"],
+    recommendation: "Implement SameSite cookies and CSRF tokens. Enable double-submit cookie pattern."
+  },
+  // Medium severity
+  { 
+    id: "open-redirect", 
+    title: "Open Redirect Vulnerability", 
+    severity: "medium" as const,
+    description: "Application allows redirection to external malicious URLs",
+    endpoints: ["/api/redirect", "/api/goto", "/api/link", "/api/forward"],
+    recommendation: "Implement allowlist for redirect URLs. Validate all redirect destinations server-side."
+  },
+  { 
+    id: "insecure-api", 
+    title: "Insecure API Endpoint", 
+    severity: "medium" as const,
+    description: "API endpoint lacks proper authentication or authorization checks",
+    endpoints: ["/api/debug", "/api/admin", "/api/internal", "/api/config"],
+    recommendation: "Implement proper authentication (OAuth2/JWT). Add role-based access control (RBAC)."
+  },
+  { 
+    id: "brute-force", 
+    title: "Brute Force Attack Pattern", 
+    severity: "medium" as const,
+    description: "Repeated failed login attempts detected from single source",
+    endpoints: ["/login", "/api/auth", "/api/signin", "/api/password/reset"],
+    recommendation: "Implement account lockout policies. Add CAPTCHA after failed attempts. Enable 2FA/MFA."
+  },
+  { 
+    id: "bot-traffic", 
+    title: "Automated Bot Traffic", 
+    severity: "medium" as const,
+    description: "High volume of automated requests detected from bot networks",
+    endpoints: ["/api/*", "/forms", "/search"],
+    recommendation: "Implement CAPTCHA challenges. Use bot detection services. Add rate limiting per IP."
+  },
+  { 
+    id: "information-disclosure", 
+    title: "Information Disclosure", 
+    severity: "medium" as const,
+    description: "Application reveals sensitive information in error messages or headers",
+    endpoints: ["/api/error", "/api/debug", "/api/status"],
+    recommendation: "Implement generic error pages. Remove stack traces from production. Sanitize error responses."
+  },
+  // Low severity
+  { 
+    id: "missing-headers", 
+    title: "Missing Security Headers", 
+    severity: "low" as const,
+    description: "Critical HTTP security headers missing from server responses",
+    endpoints: ["/*", "/api/*"],
+    recommendation: "Add headers: X-Content-Type-Options, X-Frame-Options, Content-Security-Policy, Referrer-Policy, Permissions-Policy."
+  },
+  { 
+    id: "outdated-tls", 
+    title: "Outdated TLS Version", 
+    severity: "low" as const,
+    description: "Server supports deprecated TLS 1.0/1.1 protocols with known vulnerabilities",
+    endpoints: ["/"],
+    recommendation: "Disable TLS 1.0 and 1.1. Enforce TLS 1.2/1.3. Update SSL certificates."
+  },
+  { 
+    id: "verbose-errors", 
+    title: "Verbose Error Messages", 
+    severity: "low" as const,
+    description: "Detailed error messages reveal internal system information",
+    endpoints: ["/api/*", "/error", "/debug"],
+    recommendation: "Replace detailed errors with generic messages. Log errors server-side only."
+  },
+  { 
+    id: "weak-password-policy", 
+    title: "Weak Password Policy", 
+    severity: "low" as const,
+    description: "Password requirements do not meet security best practices",
+    endpoints: ["/register", "/api/signup", "/api/password"],
+    recommendation: "Enforce minimum 12-character passwords with mixed case, numbers, and special characters."
+  },
+  { 
+    id: "no-https", 
+    title: "Missing HTTPS Enforcement", 
+    severity: "low" as const,
+    description: "Application accessible via HTTP without redirect to secure HTTPS",
+    endpoints: ["/", "/login", "/api/*"],
+    recommendation: "Enable HTTPS and implement HTTP-to-HTTPS redirect. Obtain SSL certificate from trusted CA."
+  },
+  { 
+    id: "session-timeout", 
+    title: "Inadequate Session Timeout", 
+    severity: "low" as const,
+    description: "User sessions persist longer than recommended security duration",
+    endpoints: ["/api/auth", "/dashboard", "/profile"],
+    recommendation: "Implement 15-30 minute idle timeout. Require re-authentication for sensitive operations."
+  }
+];
+
+// Shuffle array utility
+const shuffleArray = <T,>(array: T[]): T[] => {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+};
+
+// Calculate risk score based on severity
+const calculateRiskScore = (issues: DetectedIssue[]): number => {
+  const severityWeights = { critical: 30, high: 20, medium: 10, low: 5 };
+  return issues.reduce((total, issue) => total + severityWeights[issue.severity], 0);
+};
+
+// Get security rating based on risk score
+const getSecurityRating = (riskScore: number): string => {
+  if (riskScore >= 80) return "F";
+  if (riskScore >= 60) return "D";
+  if (riskScore >= 40) return "C";
+  if (riskScore >= 20) return "B";
+  return "A";
+};
+
+// Context-aware dynamic issue generation
+const generateDetectedIssues = (threatScore: number, domain: string): DetectedIssue[] => {
   const issues: DetectedIssue[] = [];
-  const rand = Math.random();
+  const isHTTPS = domain.startsWith("https://") || !domain.includes("://");
+  const numIssues = Math.floor(3 + Math.random() * 4); // 3-6 issues
   
+  // Filter vulnerabilities based on threat score
+  let availableVulns = [...VULNERABILITY_DATABASE];
+  
+  // Weight selection based on threat score
   if (threatScore > 70) {
-    issues.push(
-      { issue: "SQL Injection Vulnerability - POST /api/user", severity: "critical", status: "Patched" },
-      { issue: "Remote Code Execution Risk - /api/execute", severity: "critical", status: "Blocked" },
-      { issue: "XSS Payload Detected - /api/search", severity: "high", status: "Sanitized" },
-      { issue: "Suspicious IP Cluster - 12 addresses", severity: "high", status: "Blacklisted" },
-      { issue: "Brute Force Attack Pattern - /login", severity: "medium", status: "Rate Limited" },
-      { issue: "Data Exfiltration Attempt - DNS Tunnel", severity: "high", status: "Blocked" }
-    );
+    // High threat - include more critical/high issues
+    availableVulns = shuffleArray(availableVulns).slice(0, Math.floor(availableVulns.length * 0.8));
   } else if (threatScore > 40) {
-    issues.push(
-      { issue: "Cross-Site Scripting (XSS) - /api/input", severity: "high", status: "Sanitized" },
-      { issue: "Open Redirect Vulnerability - /api/redirect", severity: "medium", status: "Fixed" },
-      { issue: "Insecure API Endpoint - /api/debug", severity: "high", status: "Secured" },
-      { issue: "Bot Traffic Detection - 15 sources", severity: "medium", status: "Rate Limited" },
-      { issue: "Suspicious Login Patterns - 3 attempts", severity: "low", status: "Monitored" }
-    );
+    // Medium threat - balanced mix
+    availableVulns = shuffleArray(availableVulns).slice(0, Math.floor(availableVulns.length * 0.6));
   } else {
-    issues.push(
-      { issue: "Minor Security Headers Missing", severity: "low", status: "Applied" },
-      { issue: "Outdated TLS Version", severity: "medium", status: "Updated" },
-      { issue: "Verbose Error Messages", severity: "low", status: "Masked" }
-    );
+    // Low threat - mostly low/medium issues
+    availableVulns = availableVulns.filter(v => v.severity === "low" || v.severity === "medium");
+    availableVulns = shuffleArray(availableVulns).slice(0, 4);
   }
   
-  return issues;
+  // Select random issues
+  const selectedVulns = shuffleArray(availableVulns).slice(0, Math.min(numIssues, availableVulns.length));
+  
+  // Context-aware adjustments
+  selectedVulns.forEach((vuln) => {
+    const endpoint = vuln.endpoints[Math.floor(Math.random() * vuln.endpoints.length)];
+    
+    // Adjust probability based on context
+    let shouldInclude = true;
+    
+    // Skip HTTPS-related issues if domain uses HTTPS
+    if (vuln.id === "no-https" && isHTTPS) {
+      shouldInclude = Math.random() > 0.7; // 30% chance to still show
+    }
+    
+    if (shouldInclude) {
+      issues.push({
+        issue: `${vuln.title} - ${endpoint}`,
+        severity: vuln.severity,
+        status: "Detected"
+      });
+    }
+  });
+  
+  // Ensure at least 3 issues for medium/high threat scores
+  while (issues.length < 3 && threatScore > 40) {
+    const remaining = VULNERABILITY_DATABASE.filter(v => !issues.some(i => i.issue.includes(v.title)));
+    if (remaining.length > 0) {
+      const vuln = remaining[Math.floor(Math.random() * remaining.length)];
+      issues.push({
+        issue: `${vuln.title} - ${vuln.endpoints[0]}`,
+        severity: vuln.severity,
+        status: "Detected"
+      });
+    } else {
+      break;
+    }
+  }
+  
+  return shuffleArray(issues);
 };
 
 // Dynamic actions based on issues - generate specific actions for each detected issue
@@ -240,6 +456,7 @@ const RESOLUTION_STEPS: ResolutionStep[] = [
 
 const Resolve = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [currentStep, setCurrentStep] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
@@ -248,9 +465,9 @@ const Resolve = () => {
   const [detectedIssues, setDetectedIssues] = useState<DetectedIssue[]>([]);
   const [actionsTaken, setActionsTaken] = useState<ActionTaken[]>([]);
 
-  // Simulated scan result - in production, get from context/state
-  const threatScore = 78;
-  const domain = "example.com";
+  // Get scan result from navigation state
+  const threatScore = (location.state as { threatScore?: number })?.threatScore || 78;
+  const domain = (location.state as { domain?: string })?.domain || "example.com";
   
   // Random values for stats - generated each render (these will be regenerated on Run Again)
   const ipsBlocked = Math.floor(5 + Math.random() * 20);
@@ -277,7 +494,7 @@ const Resolve = () => {
 
   const startResolution = () => {
     // Generate new random issues and actions each time
-    const newIssues = generateDetectedIssues(threatScore);
+    const newIssues = generateDetectedIssues(threatScore, domain);
     const newActions = generateActionsTaken(newIssues);
     setDetectedIssues(newIssues);
     setActionsTaken(newActions);

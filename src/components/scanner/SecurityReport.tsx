@@ -31,7 +31,7 @@ const SecurityReport = ({ result, onRescan }: Props) => {
         <div className="flex items-center gap-3">
           {hasThreats && (
             <button
-              onClick={() => navigate("/resolve")}
+onClick={() => navigate("/resolve", { state: { threatScore: result.threatScore, domain: result.domain } })}
               className="px-4 py-2 bg-green-600 text-white font-display font-semibold rounded-lg text-xs tracking-wider uppercase hover:bg-green-700 transition-all flex items-center gap-2 cursor-pointer"
             >
               <Shield className="w-3.5 h-3.5" /> Resolve Detected Threats
