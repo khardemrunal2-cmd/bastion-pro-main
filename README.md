@@ -6,7 +6,19 @@
 
 **AI-Driven Security Scanning & Threat Detection Platform**
 
-[Live Demo](https://bot-8463e.web.app) • [Documentation](#) • [Report Bug](#)
+[Documentation](#) • [Report Bug](#)
+
+</div>
+
+---
+
+## 🔗 Live Demo - Try It Now
+
+<div align="center">
+
+[![Open SecureBot](https://img.shields.io/badge/🌐-Launch_SecureBot-18a974?style=for-the-badge&logo=firefox&logoColor=white)](https://bot-8463e.web.app)
+
+**Scan any domain for comprehensive security analysis**
 
 </div>
 
